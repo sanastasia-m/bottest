@@ -1,0 +1,451 @@
+from pyowm import OWM
+from telegram.ext import Updater, MessageHandler, Filters, ConversationHandler
+from telegram.ext import CallbackContext, CommandHandler
+from pyowm.utils.config import get_default_config
+from pyowm.utils import timestamps
+if_cloudly = ['CAACAgIAAxkBAAEBMolggEyoar_OYneyrrtaGSDvoCfbKwACIgEAAqZESAsR9bnMjxX0Zh8E',
+              'CAACAgIAAxkBAAEBMo9ggE3vY5EpNqEd_vd3O3OIS5UDOwACDwIAAtzyqwflTv80MV32fh8E',
+              'CAACAgIAAxkBAAEBMoxggE3t3Go3LA-9yYvTCcD_IpiMSAACMQEAAjDUnREb_jFE4pMwhh8E']
+
+if_sunny_and_hot = ['CAACAgIAAxkBAAEBMqFggFUIpURaz5yWv6SEd2gkCx4eSgACiAADFkJrClvwoKH4eQABJR8E',
+            'CAACAgIAAxkBAAEBMp5ggFT7knXkzhnbV1alHV5nF2PAbgACgwEAAhZCawrJEQoL_-AV1R8E',
+            'CAACAgIAAxkBAAEBMptggFTv9nAvFj5upkKUSfx7UqdlTgACIAEAAhAhAhDImk3RaQXWQh8E',
+            'CAACAgIAAxkBAAEBMphggFTti3bqzNhHll-syHu25F8IsAACUQADr8ZRGvLAcjetPyfvHwQ',
+            'CAACAgIAAxkBAAEBMpVggFTnseptITtPfixt0F46Mo1-1wACBAUAAkf7CQx61hycJQfNDR8E',
+            'CAACAgIAAxkBAAEBMpJggFTmbYff8dHLRuZh_9kXnp5jtAACVQADrWW8FKBlcGGKRCXhHwQ']
+
+if_sunny = ['CAACAgIAAxkBAAEBMrNggHkXEW4tF1jHx8YapI8_PVBj1gACIQIAAtzyqwe0Fc_LsMF1aB8E',
+            'CAACAgIAAxkBAAEBMrlggHmHdfIydL5xC7EEjWU-AAEi4dsAAjYCAALPu9QOiHezvdE3SUcfBA',
+            'CAACAgIAAxkBAAEBMrZggHl_R7Gn48t7Yr5Kov5SgkVwhgACegEAAhZCawqYRZuYnxC0lx8E']
+
+if_rainy = ['CAACAgIAAxkBAAEBMr9ggHsY_4rZQF4AAcdy5axY_Ozbn-EAAmsBAAKmREgL0LIp7NiFVFkfBA',
+            'CAACAgIAAxkBAAEBMsJggHsc2SRuRXAR197Du4i1TGsnVwACPQEAAjDUnREQ98oHcZKP7h8E',
+            'CAACAgIAAxkBAAEBMsVggHsdjWJG9QEDRGEmjhPebqk8jgACEAUAAs9fiweKscZVYpoFIh8E',
+            'CAACAgIAAxkBAAEBMshggHsf0Y8JJ_cx_0WdsHDFbol2ggACHAIAAtzyqwcOMlNVtoZBtR8E',
+            'CAACAgIAAxkBAAEBMstggHslz1pZMChdIPbIWHTfF7EsgAACQQADwDZPE08eOxgnDpt2HwQ',
+            'CAACAgIAAxkBAAEBMs5ggHstEgoLh4z4hWBGTmL-MLEgMwACtgADnNbnCqRL_4alee3ZHwQ']
+
+if_snowy = ['CAACAgIAAxkBAAEBMtpggILNaeFxPsn2h0iAPMAjv4fg0AACQAADWbv8Jbm_QcU3AAFdGR8E',
+            'CAACAgIAAxkBAAEBMtdggILFsBb-fi1NKl0U_0z5kHfy1AACOAEAAqZESAvMWrzVi1b-6R8E',
+            'CAACAgIAAxkBAAEBMtRggIKwFJXYnBWDKBgfrzehr_pTAAMeCQACbjLYAAF2AylDZ9CQPh8E',
+            'CAACAgIAAxkBAAEBMtFggIKnXSwsMOvBR81eGwGAn5KATgACygUAAiMFDQABG-hgbSZuySAfBA',
+            'CAACAgIAAxkBAAEBMt1ggIMw_SpI5XO5gzeTEidrL5b7hAACaQADO2AkFLD52hFMye-XHwQ',
+            'CAACAgIAAxkBAAEBMuBggINIFBVC8h6alW1yMkRIK6VSbgAChgAD9wLIDw5AaN32E2B9HwQ']
+
+if_fogy = ['CAACAgIAAxkBAAEBMvRggIRTRQn34HifUZDLMibUeT01bgACCQcAApb6EgVKa4vBDATAGR8E',
+           'CAACAgIAAxkBAAEBMvFggIRLsvSrYOsDNHwAAcm3yo2XAAFoAAJ-AAPBnGAMCxR_3b0i_fMfBA',
+           'CAACAgIAAxkBAAEBMu5ggIRHVME1nOz6bKp6ezoFky9A_AACQgADwDZPE6AFnXskhiWOHwQ',
+           'CAACAgIAAxkBAAEBMutggIQ3Q0HVbjd0aBaEmZqK2vXWaAACRgEAAladvQpHSJ8FNCc7ZB8E',
+           'CAACAgIAAxkBAAEBMuhggIQ0KEXwhnE0NwWJk3Duojqa5wACRwEAAjDUnRGOQ5cS_6ydwR8E',
+           'CAACAgIAAxkBAAEBMuNggIPeD9OfSxk07svb4nWaiOIeeQACaQEAAqZESAt_3dxMvA3vCR8E']
+
+if_not = [
+    'CAACAgIAAxkBAAEBNJJghCXmP-UffKexgdwUp079EoVpCgACBAADO2AkFLOr61RvleGrHwQ',
+    'CAACAgIAAxkBAAEBNI9ghCXXnZHrL--OZo7UZA5F_11UyAACQgADWbv8Jd7Bb6A7P1vRHwQ',
+    'CAACAgIAAxkBAAEBNIxghCW_smX_i9cEpg6D_Yg0SCW1gQACKwIAAtzyqwf3oAkr2wnPBh8E',
+    'CAACAgIAAxkBAAEBNIlghCW6FBe3SsQlApA_4UdZeAcXLQACLQEAAtA0Oiegz8D9bZOOmh8E',
+    'CAACAgIAAxkBAAEBNIZghCW4YAU2ZInSNIfFknCizEA0LwACIQIAAtzyqwe0Fc_LsMF1aB8E',
+    'CAACAgIAAxkBAAEBNINghCW3hDRu1K52KXU2m9fFr4gCnQACNgIAAs-71A6Id7O90TdJRx8E',
+    'CAACAgIAAxkBAAEBNIBghCW0-S4HO8uSdtKaexkQpEODfAACegEAAhZCawqYRZuYnxC0lx8E',
+    'CAACAgIAAxkBAAEBNJ1ghCbLXhVYmX9f4zx4JHg9XSYIgAACGgAD9wLID68vCWlyjjbLHwQ',
+    'CAACAgIAAxkBAAEBNJpghCbHaVuQvhnCbqQ9CbaJ29qtMgACDQADWbv8JS5RHx3i_HUDHwQ',
+    'CAACAgIAAxkBAAEBNJdghCayzdLATBi-fFVY4ph28bHMyAACWwADoYxBC4cRG4cpb9PAHwQ'
+]
+
+if_yes = [
+    'конечно',
+    'действительно',
+    'так точно',
+    'правда',
+    'несомненно',
+    'точно',
+    'а как же',
+    'безусловно',
+    'есть такое дело',
+    'само собой разумеется'
+]
+
+if_no = [
+    'никак нет',
+    'ни в коем случае',
+    'ни за что на свете',
+    'ни за какие сокровища',
+    'я бы не сказала',
+    'вовсе нет',
+    'еще чего!',
+    'и не пахнет',
+    'отнють нет',
+    'ни за какие блага',
+    'еще чего захотел',
+    'ни в коем разе',
+    'ни за что',
+    'и помину нет',
+    'слыхом не слыхать',
+    'ничего подобного',
+    'не скажите',
+    'отсутствует',
+    'и следа нет',
+    'ничуть'
+]
+
+if_wrong = [
+    'CAACAgIAAxkBAAEBNO5ghFTPJg2g7EblpZ8_o2gIk-yI3wACmwAD9wLID687ftTB4dOYHwQ',
+    'CAACAgIAAxkBAAEBNOtghFTKAtBd1kCUKSfYyy5rE7LzagACBgEAAvcCyA83vT1QSAABY5IfBA',
+    'CAACAgIAAxkBAAEBNOhghFS8YTJlQAmSJbT4hGerSju0ygACugkAAvFCvwVQOmZw_D2Rbh8E',
+    'CAACAgIAAxkBAAEBNOVghFS4psDBt0IHdu1W2kXqre_-aAACSwADKA9qFNoPqQbjuZ_LHwQ',
+    'CAACAgIAAxkBAAEBNN9ghFSvqhD8zhsvuerzCg9lD4tm6AAC-AIAAvPjvgtEczIS2SZ-Uh8E',
+    'CAACAgIAAxkBAAEBNNxghFSIb_BK1vr7qPlnO4AdJpDpGwACRAADKA9qFFts_7_cyqtAHwQ',
+    'CAACAgIAAxkBAAEBNNlghFSC-D1cKtSm7Ns4A503PZDsPwACJgAD0D_tD0KVCBQlxt4ZHwQ',
+    'CAACAgIAAxkBAAEBNNZghFSAwhnmzL7BlTcxC5hSJi7QUAACXQEAAtA0Oie5Hgonj3Fv2h8E',
+    'CAACAgIAAxkBAAEBNNNghFR7zsYxZl9xvJdPQxxf_6GXIwACdwEAAhZCawrTguE999zNwx8E',
+    'CAACAgIAAxkBAAEBNNBghFRrNgQcSh3waLAonefVaRLobwACEAUAAs9fiweKscZVYpoFIh8E',
+    'CAACAgIAAxkBAAEBNPFghFU3_7B-udXxWndBBA2w_7-urAACZwAD5KDOB6GjeJZ2Piz9HwQ',
+    'CAACAgIAAxkBAAEBNPRghFU99H6qcPJLK9-VBlzWXghaXgACXQUAAiMFDQABdklXYVN8a8gfBA'
+]
+import random
+for_ask = {'https://cf2.ppt-online.org/files2/slide/w/ws1OkbxauXHRm7IfJ0Eno6BKAStjGTQNci35dFlU4e/slide-2.jpg': 'а',
+           'https://cf2.ppt-online.org/files2/slide/w/ws1OkbxauXHRm7IfJ0Eno6BKAStjGTQNci35dFlU4e/slide-3.jpg': 'б',
+           'https://cf2.ppt-online.org/files2/slide/w/ws1OkbxauXHRm7IfJ0Eno6BKAStjGTQNci35dFlU4e/slide-4.jpg': 'а',
+           'https://cf2.ppt-online.org/files2/slide/w/ws1OkbxauXHRm7IfJ0Eno6BKAStjGTQNci35dFlU4e/slide-5.jpg': 'б',
+           'https://cf2.ppt-online.org/files2/slide/w/ws1OkbxauXHRm7IfJ0Eno6BKAStjGTQNci35dFlU4e/slide-6.jpg': 'в',
+           'https://cf2.ppt-online.org/files2/slide/w/ws1OkbxauXHRm7IfJ0Eno6BKAStjGTQNci35dFlU4e/slide-7.jpg': 'в',
+           'https://cf2.ppt-online.org/files2/slide/w/ws1OkbxauXHRm7IfJ0Eno6BKAStjGTQNci35dFlU4e/slide-8.jpg': 'б'}
+from telegram import ReplyKeyboardMarkup
+
+
+ask = for_ask.copy()
+right_answers = 0
+quest = ''
+already_asked = []
+
+city = 'Москва'
+TOKEN = '1757315846:AAGClNPT4jjxzEREPGzdAjP_Vb7x3kuUhCM'
+
+reply_keyboard = [['/change_city', '/start_play'],
+                  ['/daily', '/now', '/h3', '/start'],
+                  ['/will_have_snow', '/will_have_fog', '/will_have_rain']]
+markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
+
+play_keyboard = [['а', 'б', 'с'],
+                 ['продолжить', '/stop_play']]
+markup2 = ReplyKeyboardMarkup(play_keyboard, one_time_keyboard=False)
+
+yes_or_no = [['да'], ['нет']]
+markup3 = ReplyKeyboardMarkup(yes_or_no, one_time_keyboard=True)
+
+
+def change_city(update, context):
+    global city
+    try:
+        city = update.message.text.split()[1]
+        update.message.reply_text(f'Город по умолчанию: {city}')
+    except IndexError:
+        update.message.reply_text(f'Введите в формате /change_city "город" или /start для возврата.')
+
+
+def stickers(w):
+    if 'облачно' in w.detailed_status or 'пасмурно' in w.detailed_status:
+        return random.choice(if_cloudly)
+    elif ('солнечно' in w.detailed_status or 'ясно' in w.detailed_status) and \
+            int(w.temperature("celsius")["temp"]) >= 25:
+        return random.choice(if_sunny_and_hot)
+    elif 'солнечно' in w.detailed_status or 'ясно' in w.detailed_status:
+        return random.choice(if_sunny)
+    elif 'дождь' in w.detailed_status or 'дождливо' in w.detailed_status:
+        return random.choice(if_rainy)
+    elif 'снег' in w.detailed_status:
+        return random.choice(if_snowy)
+    elif 'дымка' in w.detailed_status or 'туман' in w.detailed_status or 'мгла' in w.detailed_status:
+        return random.choice(if_fogy)
+    else:
+        return random.choice(if_yes)
+
+
+def start(update, context):
+    update.message.reply_text(f'Привет, узнаем погоду для города {city}?\n'
+                              '/change_city для смены города по умолчанию\n'
+                              '/daily для прогноза на завтра в определенное время в формате 00.00\n'
+                              '/now для прогноза прямо сейчас\n'
+                              '/h3 для прогноза через 3 часа\n'
+                              '/will_have_snow узнать будет ли снег в ближайшие три часа\n'
+                              '/will_have_rain узнать будет ли дождь в ближайшие три часа\n'
+                              '/will_have_fog узнать будет ли туман в ближайшие три часа\n'
+                              '/start_play для начала игры',
+                              reply_markup=markup)
+
+
+def now(update, context):
+    place = city
+    config_dict = get_default_config()
+    config_dict['language'] = 'ru'
+    owm = OWM('3c55bbaac015f0a173e15d6345bf3970', config_dict)
+    mgr = owm.weather_manager()
+    observation = mgr.weather_at_place(place)
+    w = observation.weather
+    update.message.reply_text("\n".join([
+            f'Кратко если: {w.detailed_status}',
+            f'А ветер.. Скорость: {w.wind()["speed"]}м/с',
+            f'Влажность: {w.humidity}%',
+            f't°: {int(w.temperature("celsius")["temp"])}°, ощущается как: '
+            f'{int(w.temperature("celsius")["feels_like"])}°']))
+    update.message.reply_sticker(stickers(w))
+
+
+def daily(update, context):
+    place = city
+    config_dict = get_default_config()
+    config_dict['language'] = 'ru'
+
+    owm = OWM('3c55bbaac015f0a173e15d6345bf3970', config_dict)
+    try:
+        time = list(map(int, (update.message.text.split()[1]).split('.')))
+        if time[1] > 60:
+            time[1], time[0] = time[1] % 60, time[0] + time[1] // 60
+        elif time[1] < 60:
+            time[1], time[0] = time[1] % 60, time[0] - abs(time[1] // 60)
+        if time[0] > 24 or time[0] < 0:
+            time[0] = abs(time[0] % 24)
+    except IndexError:
+        time = [12, 00]
+    mgr = owm.weather_manager()
+    three_h_forecaster = mgr.forecast_at_place(place, '3h')
+    tomorrow_at_five = timestamps.tomorrow(*time)  # datetime object for tomorrow at 5 PM
+    w = three_h_forecaster.get_weather_at(tomorrow_at_five)
+    if time[1] == 0:
+        time[1] = '00'
+    update.message.reply_text("\n".join([
+        f'Погода завтра в {":".join(map(str, time))}\n'
+        f'Кратко если: {w.detailed_status}',
+        f'А ветер.. Скорость: {w.wind()["speed"]}м/с',
+        f'Влажность: {w.humidity}%',
+        f't°: {int(w.temperature("celsius")["temp"])}°, ощущается как: '
+        f'{int(w.temperature("celsius")["feels_like"])}°']))
+    update.message.reply_sticker(stickers(w))
+
+
+def h3(update, context):
+    place = city
+    config_dict = get_default_config()
+    config_dict['language'] = 'ru'
+
+    owm = OWM('3c55bbaac015f0a173e15d6345bf3970', config_dict)
+
+    mgr = owm.weather_manager()
+
+    three_h_forecaster = mgr.forecast_at_place(place, '3h')
+    tomorrow_at_five = timestamps.next_three_hours()
+    w = three_h_forecaster.get_weather_at(tomorrow_at_five)
+    update.message.reply_text("\n".join([
+        f'Кратко если: {w.detailed_status}',
+        f'А ветер.. Скорость: {w.wind()["speed"]}м/с',
+        f'Влажность: {w.humidity}%',
+        f't°: {int(w.temperature("celsius")["temp"])}°, ощущается как: {int(w.temperature("celsius")["feels_like"])}°'
+    ]))
+    update.message.reply_sticker(stickers(w))
+
+
+def default_city(update, context):
+    global city
+    city = update.message.text
+
+    update.message.reply_text(f'Город по умолчанию: {city}')
+
+
+def will_have_snow(update, context):
+    place = city
+    config_dict = get_default_config()
+    config_dict['language'] = 'ru'
+
+    owm = OWM('3c55bbaac015f0a173e15d6345bf3970', config_dict)
+    mgr = owm.weather_manager()
+    three_h_forecaster = mgr.forecast_at_place(place, '3h')
+    if three_h_forecaster.will_have_snow():
+        update.message.reply_text(random.choice(if_yes))
+        update.message.reply_sticker(random.choice(if_snowy))
+    else:
+        update.message.reply_text(random.choice(if_no))
+        update.message.reply_sticker(random.choice(if_not))
+
+
+def will_have_rain(update, context):
+    place = city
+    config_dict = get_default_config()
+    config_dict['language'] = 'ru'
+    owm = OWM('3c55bbaac015f0a173e15d6345bf3970', config_dict)
+    mgr = owm.weather_manager()
+    three_h_forecaster = mgr.forecast_at_place(place, '3h')
+    if three_h_forecaster.will_have_rain():
+        update.message.reply_text(random.choice(if_yes))
+        update.message.reply_sticker(random.choice(if_rainy))
+    else:
+        update.message.reply_text(random.choice(if_no))
+        update.message.reply_sticker(random.choice(if_not))
+
+
+def will_have_fog(update, context):
+    place = city
+    config_dict = get_default_config()
+    config_dict['language'] = 'ru'
+
+    owm = OWM('3c55bbaac015f0a173e15d6345bf3970', config_dict)
+    mgr = owm.weather_manager()
+    three_h_forecaster = mgr.forecast_at_place(place, '3h')
+    if three_h_forecaster.will_have_fog():
+        update.message.reply_text(random.choice(if_yes))
+        update.message.reply_sticker(random.choice(if_fogy))
+    else:
+        update.message.reply_text(random.choice(if_no))
+        update.message.reply_sticker(random.choice(if_not))
+
+
+def start_play(update, context):
+    update.message.reply_text('Начнем игру?', reply_markup=markup3)
+    global already_asked
+    already_asked = []
+    return 1
+
+
+def q1(update, context):
+    global quest, already_asked, ask
+    if update.message.text != '/stop_play':
+        if update.message.text.lower() != 'нет':
+            if len(ask) == 0:
+                ask = for_ask.copy()
+                update.message.reply_text(f'Вопросы закончились. Вы решили {right_answers} из 7. Поздравляю!')
+                update.message.reply_sticker(random.choice(if_not))
+                update.message.reply_text(f'Привет, узнаем погоду для города {city}?\n'
+                                          '/change_city для смены города по умолчанию\n'
+                                          '/daily для прогноза на завтра в определенное время в формате 00.00\n'
+                                          '/now для прогноза прямо сейчас\n'
+                                          '/h3 для прогноза через 3 часа\n'
+                                          '/will_have_snow узнать будет ли снег в ближайшие три часа\n'
+                                          '/will_have_rain узнать будет ли дождь в ближайшие три часа\n'
+                                          '/will_have_fog узнать будет ли туман в ближайшие три часа\n'
+                                          '/start_play для начала игры',
+                                          reply_markup=markup)
+                return ConversationHandler.END
+            else:
+                quest = random.choice([i for i in (ask.keys())])
+                already_asked.append(quest)
+                update.message.reply_photo(quest)
+                update.message.reply_text('Введите букву', reply_markup=markup2)
+            return 2
+        else:
+            update.message.reply_text(f'Вопросы закончились. Вы решили {right_answers} из 7. Поздравляю!')
+            update.message.reply_sticker(random.choice(if_not))
+            update.message.reply_text(f'Привет, узнаем погоду для города {city}?\n'
+                                      '/change_city для смены города по умолчанию\n'
+                                      '/daily для прогноза на завтра в определенное время в формате 00.00\n'
+                                      '/now для прогноза прямо сейчас\n'
+                                      '/h3 для прогноза через 3 часа\n'
+                                      '/will_have_snow узнать будет ли снег в ближайшие три часа\n'
+                                      '/will_have_rain узнать будет ли дождь в ближайшие три часа\n'
+                                      '/will_have_fog узнать будет ли туман в ближайшие три часа\n'
+                                      '/start_play для начала игры',
+                                      reply_markup=markup)
+            return ConversationHandler.END
+    elif update.message.text == '/stop_play':
+        update.message.reply_text(f'Вопросы закончились. Вы решили {right_answers} из 7. Поздравляю!')
+        update.message.reply_sticker(random.choice(if_not))
+        update.message.reply_text(f'Привет, узнаем погоду для города {city}?\n'
+                                  '/change_city для смены города по умолчанию\n'
+                                  '/daily для прогноза на завтра в определенное время в формате 00.00\n'
+                                  '/now для прогноза прямо сейчас\n'
+                                  '/h3 для прогноза через 3 часа\n'
+                                  '/will_have_snow узнать будет ли снег в ближайшие три часа\n'
+                                  '/will_have_rain узнать будет ли дождь в ближайшие три часа\n'
+                                  '/will_have_fog узнать будет ли туман в ближайшие три часа\n'
+                                  '/start_play для начала игры',
+                                  reply_markup=markup)
+        return ConversationHandler.END
+    else:
+        update.message.reply_text('Нажмите "продолжить" или любую букву для продолжения,'
+                                  ' или команду /stop_play для завершения игры.')
+
+
+def q2(update, context):
+    global ask, right_answers
+    if update.message.text != '/stop_play':
+        if update.message.text.lower() == ask[quest]:
+            update.message.reply_text('Верно!\n'
+                                      'Нажмите "продолжить" для продолжения или команду '
+                                      '/stop_play для завершения игры.')
+            update.message.reply_sticker(random.choice(if_not))
+            right_answers += 1
+        else:
+
+            update.message.reply_text('Ошибка!\n'
+                                      'Нажмите "продолжить" для продолжения или команду '
+                                      '/stop_play для завершения игры.')
+            update.message.reply_sticker(random.choice(if_wrong))
+        del ask[quest]
+        return 1
+    elif update.message.text == '/stop_play':
+        update.message.reply_text(f'Вопросы закончились. Вы решили {right_answers} из 7. Поздравляю!')
+        update.message.reply_sticker(random.choice(if_not))
+        update.message.reply_text(f'Привет, узнаем погоду для города {city}?\n'
+                                  '/change_city для смены города по умолчанию\n'
+                                  '/daily для прогноза на завтра в определенное время в формате 00.00\n'
+                                  '/now для прогноза прямо сейчас\n'
+                                  '/h3 для прогноза через 3 часа\n'
+                                  '/will_have_snow узнать будет ли снег в ближайшие три часа\n'
+                                  '/will_have_rain узнать будет ли дождь в ближайшие три часа\n'
+                                  '/will_have_fog узнать будет ли туман в ближайшие три часа\n'
+                                  '/start_play для начала игры',
+                                  reply_markup=markup)
+        return ConversationHandler.END
+    else:
+        update.message.reply_text('Нажмите "продолжить" для продолжения или команду /stop_play для завершения игры.')
+
+
+def stop_play(update, context):
+    update.message.reply_text(f'Вопросы закончились. Вы решили {right_answers} из 7. Поздравляю!')
+    update.message.reply_sticker(random.choice(if_not))
+    update.message.reply_text(f'Привет, узнаем погоду для города {city}?\n'
+                              '/change_city для смены города по умолчанию\n'
+                              '/daily для прогноза на завтра в определенное время в формате 00.00\n'
+                              '/now для прогноза прямо сейчас\n'
+                              '/h3 для прогноза через 3 часа\n'
+                              '/will_have_snow узнать будет ли снег в ближайшие три часа\n'
+                              '/will_have_rain узнать будет ли дождь в ближайшие три часа\n'
+                              '/will_have_fog узнать будет ли туман в ближайшие три часа\n'
+                              '/start_play для начала игры',
+                              reply_markup=markup)
+    return ConversationHandler.END
+
+
+def main():
+    updater = Updater(TOKEN, use_context=True)
+    dp = updater.dispatcher
+    updater.start_polling()
+    dp = updater.dispatcher
+    updater.start_polling()
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler('start_play', start_play)],
+
+        # Состояние внутри диалога.
+        states={
+            1: [MessageHandler(Filters.text, q1)],
+            2: [MessageHandler(Filters.text, q2)]
+        },
+
+        fallbacks=[CommandHandler('stop_play', stop_play)]
+    )
+    dp.add_handler(conv_handler)
+
+    dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(CommandHandler('now', now))
+    dp.add_handler(CommandHandler('change_city', change_city))
+    dp.add_handler(CommandHandler('daily', daily))
+    dp.add_handler(CommandHandler('h3', h3))
+    dp.add_handler(CommandHandler('will_have_snow', will_have_snow))
+    dp.add_handler(CommandHandler('will_have_fog', will_have_fog))
+    dp.add_handler(CommandHandler('will_have_rain', will_have_rain))
+    dp.add_handler(CommandHandler('start_play', start_play))
+
+    updater.idle()
+
+
+if __name__ == '__main__':
+    print('start')
+    main()
